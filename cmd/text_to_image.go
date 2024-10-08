@@ -17,9 +17,9 @@ func ptr(s string) *string {
 }
 
 // serveCmd represents the serve command
-var serveCmd = &cobra.Command{
-	Use:   "serve",
-	Short: "A small server",
+var textToImageCmd = &cobra.Command{
+	Use:   "textToImage",
+	Short: "LP: text to image generator",
 	Run: func(cmd *cobra.Command, args []string) {
 		// Use the API key loaded in root.go
 		if cfg == nil {
@@ -62,7 +62,7 @@ var serveCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(serveCmd)
+	rootCmd.AddCommand(textToImageCmd)
 
 	// Here you will define your flags and configuration settings.
 
