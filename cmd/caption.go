@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -87,8 +88,24 @@ func readTranscriptionResult(s3Client *s3.Client, bucketName, fileKey string) (s
 	if err != nil {
 		return "", fmt.Errorf("failed to read object body: %v", err)
 	}
+	var transcriptionResult struct {
+		Results struct {
+			Transcripts []struct {
+				Transcript string `json:"transcript"`
+			} `json:"transcripts"`
+		} `json:"results"`
+	}
 
-	return string(body), nil
+	err = json.Unmarshal(body, &transcriptionResult)
+	if err != nil {
+		return "", fmt.Errorf("error unmarshalling JSON: %v", err)
+	}
+
+	if len(transcriptionResult.Results.Transcripts) > 0 {
+		return transcriptionResult.Results.Transcripts[0].Transcript, nil // Return only the transcript
+	}
+	return "", nil
+	//return string(body), nil
 }
 
 func checkTranscriptionJobStatus(transcribeClient *transcribe.Client, jobName string) error {
@@ -118,27 +135,50 @@ func checkTranscriptionJobStatus(transcribeClient *transcribe.Client, jobName st
 	return nil
 }
 
-func createTranscriptionJob(transcribeClient *transcribe.Client, bucketName, videoFileName, outputBucketName, jobName string) (string, error) {
+// isTranscriptionJobNotFound checks if the error is a "job not found" error
+func deleteTranscriptionJob(transcribeClient *transcribe.Client, jobName string) error {
+	_, err := transcribeClient.DeleteTranscriptionJob(context.TODO(), &transcribe.DeleteTranscriptionJobInput{
+		TranscriptionJobName: aws.String(jobName),
+	})
+	if err != nil {
+		return fmt.Errorf("deleteTranscriptionJob: failed to delete job %s: %v", jobName, err)
+	}
+	return nil
+}
+
+func createTranscriptionJob(transcribeClient *transcribe.Client, inputBucketName, videoFileName, outputBucketName, jobName string) (string, error) {
 
 	// Check if transcription job already exists, if yes delete it
 
 	getResult, err := transcribeClient.GetTranscriptionJob(context.TODO(), &transcribe.GetTranscriptionJobInput{TranscriptionJobName: aws.String(jobName)})
 
 	// As there is no error, such a job already exists , so we must first delete it and then create a new one
-	if err == nil {
-		out, err := transcribeClient.DeleteTranscriptionJob(context.TODO(), &transcribe.DeleteTranscriptionJobInput{TranscriptionJobName: getResult.TranscriptionJob.TranscriptionJobName})
+	if err == nil && getResult.TranscriptionJob != nil {
+		// Delete the existing job
+		err = deleteTranscriptionJob(transcribeClient, *getResult.TranscriptionJob.TranscriptionJobName)
 		if err != nil {
 			log.Fatalf("createTranscriptionJob: Error deleting transcription job: %v", err)
+			return "", fmt.Errorf("createTranscriptionJob: Error deleting transcription job: %v", err)
 		}
-		fmt.Printf("createTranscriptionJob: Deleted existing Transcription job: %s\n", out)
+		fmt.Printf("createTranscriptionJob: Deleted existing Transcription job: %s\n", jobName)
+	} else if err != nil {
+		// If the error is anything other than job not found, handle it
+		return "", fmt.Errorf("createTranscriptionJob: failed to get transcription job: %v", err)
 	}
+
 	// if err is not nil , means such a job does not exist and we can continue creating it directly
 	// Prepare the input parameters for the transcription job
 	input := &transcribe.StartTranscriptionJobInput{
 		TranscriptionJobName: aws.String(jobName),
 		LanguageCode:         "en-US", // Change as needed
-		Media:                &types.Media{MediaFileUri: aws.String(fmt.Sprintf("s3://%s/%s", bucketName, videoFileName))},
-		OutputBucketName:     aws.String(outputBucketName),
+		Media:                &types.Media{MediaFileUri: aws.String(fmt.Sprintf("s3://%s/%s", inputBucketName, videoFileName))},
+		Subtitles: &types.Subtitles{
+			Formats: []types.SubtitleFormat{
+				types.SubtitleFormatSrt,
+			},
+			OutputStartIndex: aws.Int32(1),
+		},
+		OutputBucketName: aws.String(outputBucketName),
 	}
 	// Start a transcription job
 	startResult, err := transcribeClient.StartTranscriptionJob(context.TODO(), input)
@@ -155,14 +195,15 @@ var captionCmd = &cobra.Command{
 	Short: "Generate caption for video",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("caption called")
-		bucketName := "lpvideouploader"
+		inputBucketName := "lpvideouploader"
+		outputBucketName := "lpvideouploader"
 		cfg, _ := loadAWSConfig()
 		s3Client := s3.NewFromConfig(cfg)
 
 		videoFilePath := filepath.Join("cmd", "lp1.mp4")
 
 		// Upload the MP4 file to S3
-		fileURL, err := uploadToS3(s3Client, bucketName, videoFilePath)
+		fileURL, err := uploadToS3(s3Client, inputBucketName, videoFilePath)
 		if err != nil {
 			log.Fatalf("Failed to upload file: %v", err)
 		}
@@ -170,11 +211,10 @@ var captionCmd = &cobra.Command{
 		fmt.Printf("File uploaded successfully: %s\n", fileURL)
 		// Transcription Job for captions and subtitles
 		transcribeClient := transcribe.NewFromConfig(cfg)
-		videoFileName := "videos/lp1.mp4"     // Path in S3
-		outputBucketName := "lpvideouploader" // Change this to your output bucket
+		videoFileName := "videos/lp1.mp4" // Path in S3
 		jobName := "GetCaptionsAndSubtitlesTranscriptionJob"
 
-		jobID, err := createTranscriptionJob(transcribeClient, bucketName, videoFileName, outputBucketName, jobName)
+		jobID, err := createTranscriptionJob(transcribeClient, inputBucketName, videoFileName, outputBucketName, jobName)
 		if err != nil {
 			log.Fatalf("Error creating transcription job: %v", err)
 		}
@@ -195,6 +235,7 @@ var captionCmd = &cobra.Command{
 
 		fmt.Println("Transcript Content:")
 		fmt.Println(transcriptContent)
+
 	},
 }
 
