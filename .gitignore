@@ -1,0 +1,16 @@
+# Air (hot reload) generated
+.air
+
+# temp folder
+tmp
+
+# build folder
+build
+
+.DS_Store
+
+node_modules
+
+.env
+
+dist/
