@@ -25,7 +25,7 @@ type Config struct {
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "lp_ai_sumseg",
-	Short: "A brief description of your application",
+	Short: "AI CLI tool to get captions, subtitles and summarize video",
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },

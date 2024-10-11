@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
-	"path/filepath"
+	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -22,7 +22,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var videoURL = "https://vod-cdn.lp-playback.studio/raw/jxf4iblf6wlsyor6526t4tcmtmqa/catalyst-vod-com/hls/de93swf0r2g7tlrz/360p0.mp4"
+// Path in S3
+var s3InputVideoPath = "videos/process.mp4"
+var s3OutputTranscriptionPath = "transcriptions/"
+
+// Global variable to hold the transcription result
+var transcriptionResult struct {
+	Results struct {
+		Transcripts []struct {
+			Transcript string `json:"transcript"`
+		} `json:"transcripts"`
+	} `json:"results"`
+	Subtitles              string // To hold subtitle content
+	Summary                string // To hold summary content
+	transcriptionProcessed bool
+	lastProcessedVideoFile string
+}
 
 func loadAWSConfig() (aws.Config, error) {
 
@@ -39,73 +54,115 @@ func loadAWSConfig() (aws.Config, error) {
 	return cfg, nil
 
 }
-func uploadToS3(s3Client *s3.Client, bucketName, filePath string) (string, error) {
-	// Load AWS credentials and create an S3 client as before...
-	// Create an S3 service client
 
-	// Open the file
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to open file %q: %v", filePath, err)
+/*
+	func uploadToS3(s3Client *s3.Client, bucketName, filePath string) (string, error) {
+		// Load AWS credentials and create an S3 client as before...
+		// Create an S3 service client
+
+		// Open the file
+		file, err := os.Open(filePath)
+		if err != nil {
+			return "", fmt.Errorf("failed to open file %q: %v", filePath, err)
+		}
+		defer file.Close()
+
+		// Get the file name
+		fileName := filepath.Base(filePath)
+
+		// Construct the S3 key (path within the bucket)
+		s3Key := fmt.Sprintf("videos/%s", fileName) // This specifies that the file is going into the "videos" folder
+
+		// Upload the file to S3
+		_, err = s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(s3Key),
+			Body:   file,
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to upload file to S3: %v", err)
+		}
+
+		// Construct the S3 file URL
+		fileURL := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", bucketName, s3Key)
+
+		return fileURL, nil
 	}
-	defer file.Close()
+*/
 
-	// Get the file name
-	fileName := filepath.Base(filePath)
+// streamToS3 streams the content from the provided URL directly to the given S3 bucket
+func streamToS3(s3Client *s3.Client, ipfsURL, bucketName string, contentLength int64) error {
+	// Send a GET request to the URL to stream the content
+	resp, err := http.Get(ipfsURL)
+	if err != nil {
+		return fmt.Errorf("failed to stream from IPFS: %v", err)
+	}
+	defer resp.Body.Close()
 
-	// Construct the S3 key (path within the bucket)
-	s3Key := fmt.Sprintf("videos/%s", fileName) // This specifies that the file is going into the "videos" folder
+	// Check if the response status is 200 OK
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to stream file, status: %s", resp.Status)
+	}
 
-	// Upload the file to S3
-	_, err = s3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+	// Create the upload input for streaming the file
+	// All files will be stored as process.mp4 under videos folder so that we do not keep uploading all files into s3
+	input := &s3.PutObjectInput{
 		Bucket: aws.String(bucketName),
-		Key:    aws.String(s3Key),
-		Body:   file,
-	})
+		Key:    aws.String(s3InputVideoPath),
+
+		Body:          resp.Body,                // Streaming the content directly to S3
+		ContentLength: aws.Int64(contentLength), // Optional: Set the content length for the contentLength,
+	}
+	fmt.Printf("Uploading %s to %s/%s\n", ipfsURL, bucketName, s3InputVideoPath)
+	// Upload the file to S3
+	_, err = s3Client.PutObject(context.TODO(), input)
 	if err != nil {
-		return "", fmt.Errorf("failed to upload file to S3: %v", err)
+		return fmt.Errorf("failed to upload file to S3: %v", err)
 	}
 
-	// Construct the S3 file URL
-	fileURL := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", bucketName, s3Key)
-
-	return fileURL, nil
+	return nil
 }
 
-func readTranscriptionResult(s3Client *s3.Client, bucketName, fileKey string) (string, error) {
+func readTranscriptionResult(s3Client *s3.Client, bucketName, jsonFileKey, srtFilekey string) error {
 	input := &s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
-		Key:    aws.String(fileKey),
+		Key:    aws.String(s3OutputTranscriptionPath + jsonFileKey),
 	}
 
 	result, err := s3Client.GetObject(context.TODO(), input)
 	if err != nil {
-		return "", fmt.Errorf("failed to get object from S3: %v", err)
+		return fmt.Errorf("failed to get json object from S3: %v", err)
 	}
 	defer result.Body.Close()
 
 	body, err := io.ReadAll(result.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read object body: %v", err)
-	}
-	var transcriptionResult struct {
-		Results struct {
-			Transcripts []struct {
-				Transcript string `json:"transcript"`
-			} `json:"transcripts"`
-		} `json:"results"`
+		return fmt.Errorf("failed to read object body: %v", err)
 	}
 
 	err = json.Unmarshal(body, &transcriptionResult)
 	if err != nil {
-		return "", fmt.Errorf("error unmarshalling JSON: %v", err)
+		return fmt.Errorf("error unmarshalling JSON: %v", err)
 	}
 
-	if len(transcriptionResult.Results.Transcripts) > 0 {
-		return transcriptionResult.Results.Transcripts[0].Transcript, nil // Return only the transcript
+	input = &s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(s3OutputTranscriptionPath + srtFilekey),
 	}
-	return "", nil
-	//return string(body), nil
+
+	result, err = s3Client.GetObject(context.TODO(), input)
+	if err != nil {
+		return fmt.Errorf("failed to get srt object from S3: %v", err)
+	}
+	defer result.Body.Close()
+
+	srtBody, err := io.ReadAll(result.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read object body: %v", err)
+	}
+	transcriptionResult.Subtitles = string(srtBody) // Store subtitles in global variable
+
+	return nil
 }
 
 func checkTranscriptionJobStatus(transcribeClient *transcribe.Client, jobName string) error {
@@ -163,7 +220,8 @@ func createTranscriptionJob(transcribeClient *transcribe.Client, inputBucketName
 		fmt.Printf("createTranscriptionJob: Deleted existing Transcription job: %s\n", jobName)
 	} else if err != nil {
 		// If the error is anything other than job not found, handle it
-		return "", fmt.Errorf("createTranscriptionJob: failed to get transcription job: %v", err)
+		/*return "", fmt.Errorf("createTranscriptionJob: failed to get transcription job: %v", err)*/
+		log.Printf("createTranscriptionJob: failed to get transcription job: %v", err)
 	}
 
 	// if err is not nil , means such a job does not exist and we can continue creating it directly
@@ -179,6 +237,7 @@ func createTranscriptionJob(transcribeClient *transcribe.Client, inputBucketName
 			OutputStartIndex: aws.Int32(1),
 		},
 		OutputBucketName: aws.String(outputBucketName),
+		OutputKey:        aws.String("transcriptions/"),
 	}
 	// Start a transcription job
 	startResult, err := transcribeClient.StartTranscriptionJob(context.TODO(), input)
@@ -189,66 +248,160 @@ func createTranscriptionJob(transcribeClient *transcribe.Client, inputBucketName
 	return *startResult.TranscriptionJob.TranscriptionJobName, nil // Return job name or handle as needed
 }
 
-// captionCmd represents the caption command
+// getInputFileSize fetches the content length from IPFS by sending an HTTP HEAD request
+func getInputFileSize(fileURL string) (int64, error) {
+	// Send a HEAD request to get the content length
+	resp, err := http.Head(fileURL)
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch file size from URL: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Check if the Content-Length header is present
+	contentLength := resp.Header.Get("Content-Length")
+	if contentLength == "" {
+		return 0, fmt.Errorf("content length not available in the response")
+	}
+
+	// Convert the content length to an integer
+	size, err := strconv.ParseInt(contentLength, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse content length: %v", err)
+	}
+
+	return size, nil
+}
+
+func processTranscription(inputBucketName, videoFileURL, outputBucketName, jobName string) error {
+	if transcriptionResult.transcriptionProcessed {
+		return nil // Return already processed result
+	}
+	cfg, err := loadAWSConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load AWS config: %v", err)
+	}
+	s3Client := s3.NewFromConfig(cfg)
+	transcribeClient := transcribe.NewFromConfig(cfg)
+
+	// Step 1: Fetch the content length (file size) from URL
+	contentLength, err := getInputFileSize(videoFileURL)
+	if err != nil {
+		log.Fatalf("Failed to get file size from URL: %v", err)
+	}
+	fmt.Printf("Content-Length: %d bytes\n", contentLength)
+
+	// Upload the MP4 file to S3
+	//fileURL, err := uploadToS3(s3Client, inputBucketName, videoFileURL)
+	// Step 2: Stream the MP4 file from the URL to S3
+	err = streamToS3(s3Client, videoFileURL, inputBucketName, contentLength)
+	if err != nil {
+		return fmt.Errorf("failed to upload file: %v", err)
+	}
+	fmt.Printf("File uploaded successfully to S3: \n")
+
+	//Create Transcription Job
+
+	jobID, err := createTranscriptionJob(transcribeClient, inputBucketName, s3InputVideoPath, outputBucketName, jobName)
+	if err != nil {
+		return fmt.Errorf("error creating transcription job: %v", err)
+	}
+
+	fmt.Printf("Transcription job created successfully with ID: %s\n", jobID)
+
+	err = checkTranscriptionJobStatus(transcribeClient, jobID) // Check the status of the transcription job
+	if err != nil {
+		return fmt.Errorf("error checking transcription job status: %v", err)
+	}
+	jsonFileKey := fmt.Sprintf("%s.json", jobID) // Assuming the output file is named after the job ID with a .json extension
+
+	srtFileKey := fmt.Sprintf("%s.srt", jobID) // Assuming the output file is named after the job ID with a .json extension
+
+	err = readTranscriptionResult(s3Client, outputBucketName, jsonFileKey, srtFileKey)
+	if err != nil {
+		return fmt.Errorf("error reading transcription result: %v", err)
+	}
+	transcriptionResult.transcriptionProcessed = true // Mark as processed
+	transcriptionResult.lastProcessedVideoFile = videoFileURL
+	return nil
+}
+
+func handleCaptionCommand(videoURL string) error {
+
+	inputBucketName := "lpvideouploader"
+	outputBucketName := "lpvideouploader"
+	jobName := "GetCaptionsAndSubtitlesTranscriptionJob"
+
+	err := processTranscription(inputBucketName, videoURL, outputBucketName, jobName)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Transcript Content:")
+	fmt.Println(transcriptionResult.Results.Transcripts)
+
+	return nil
+}
+
+func handleSubtitlesCommand(videoURL string) error {
+	inputBucketName := "lpvideouploader"
+	outputBucketName := "lpvideouploader"
+	jobName := "GetCaptionsAndSubtitlesTranscriptionJob"
+
+	err := processTranscription(inputBucketName, videoURL, outputBucketName, jobName)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Subtitle Content:")
+	fmt.Println(transcriptionResult.Subtitles)
+
+	return nil
+}
+
+func handleSummaryCommand(videoURL string) error {
+	inputBucketName := "lpvideouploader"
+	outputBucketName := "lpvideouploader"
+	jobName := "GetCaptionsAndSubtitlesTranscriptionJob"
+
+	err := processTranscription(inputBucketName, videoURL, outputBucketName, jobName)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Summary Content:")
+	fmt.Println(transcriptionResult.Summary)
+
+	return nil
+}
+
 var captionCmd = &cobra.Command{
-	Use:   "caption",
+	Use:   "caption [videoURL]",
 	Short: "Generate caption for video",
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("caption called")
-		inputBucketName := "lpvideouploader"
-		outputBucketName := "lpvideouploader"
-		cfg, _ := loadAWSConfig()
-		s3Client := s3.NewFromConfig(cfg)
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleCaptionCommand(args[0]) // Pass the video URL to the handler
+	},
+}
 
-		videoFilePath := filepath.Join("cmd", "lp1.mp4")
+var subtitlesCmd = &cobra.Command{
+	Use:   "subtitles [videoURL]",
+	Short: "Generate subtitles for video",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleSubtitlesCommand(args[0])
+	},
+}
 
-		// Upload the MP4 file to S3
-		fileURL, err := uploadToS3(s3Client, inputBucketName, videoFilePath)
-		if err != nil {
-			log.Fatalf("Failed to upload file: %v", err)
-		}
-
-		fmt.Printf("File uploaded successfully: %s\n", fileURL)
-		// Transcription Job for captions and subtitles
-		transcribeClient := transcribe.NewFromConfig(cfg)
-		videoFileName := "videos/lp1.mp4" // Path in S3
-		jobName := "GetCaptionsAndSubtitlesTranscriptionJob"
-
-		jobID, err := createTranscriptionJob(transcribeClient, inputBucketName, videoFileName, outputBucketName, jobName)
-		if err != nil {
-			log.Fatalf("Error creating transcription job: %v", err)
-		}
-
-		fmt.Printf("Transcription job created successfully with ID: %s\n", jobID)
-
-		err = checkTranscriptionJobStatus(transcribeClient, jobID) // Check the status of the transcription job
-		if err != nil {
-			log.Fatalf("Error checking transcription job status: %v", err)
-		}
-
-		fileKey := fmt.Sprintf("%s.json", jobID) // Assuming the output file is named after the job ID with a .json extension
-
-		transcriptContent, err := readTranscriptionResult(s3Client, outputBucketName, fileKey)
-		if err != nil {
-			log.Fatalf("Error reading transcription result: %v", err)
-		}
-
-		fmt.Println("Transcript Content:")
-		fmt.Println(transcriptContent)
-
+var summaryCmd = &cobra.Command{
+	Use:   "summary [videoURL]",
+	Short: "Generate summary of video",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return handleSummaryCommand(args[0])
 	},
 }
 
 func init() {
+	//rootCmd.AddCommand(captionCmd)
+
 	rootCmd.AddCommand(captionCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// captionCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// captionCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	rootCmd.AddCommand(subtitlesCmd)
+	rootCmd.AddCommand(summaryCmd)
 }
