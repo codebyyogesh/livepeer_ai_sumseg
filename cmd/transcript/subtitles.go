@@ -1,6 +1,3 @@
-/*
-Copyright © 2024 Yogesh Kulkarni <yogeshcodes@zohomail.in>
-*/
 package caption
 
 import (
@@ -10,24 +7,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func handleCaptionCommand(videoURL string, env *lpsumsegconfig.Config) error {
-
+func handleSubtitlesCommand(videoURL string, env *lpsumsegconfig.Config) error {
 	tcParams := newTranscribeParams()
 
 	err := processTranscription(tcParams, videoURL, env)
 	if err != nil {
 		return err
 	}
-	fmt.Println("Transcript Content:")
-	fmt.Println(transcriptionResult.Results.Transcripts)
+
+	fmt.Println("Subtitle Content:")
+	fmt.Println(transcriptionResult.Subtitles)
 
 	return nil
 }
 
-var CaptionCmd = &cobra.Command{
-	Use:   "caption [videoURL]",
-	Short: "Generate caption for video",
-	Args:  cobra.ExactArgs(1),
+var SubtitlesCmd = &cobra.Command{
+	Use:   "subtitles [videoURL]",
+	Short: "Generate subtitles for video",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, ok := cmd.Context().Value(lpsumsegconfig.ConfigKey("config")).(*lpsumsegconfig.Config) // Retrieve config from context
 
@@ -35,6 +31,6 @@ var CaptionCmd = &cobra.Command{
 			return fmt.Errorf("asset:failed to retrieve config from context")
 		}
 
-		return handleCaptionCommand(args[0], env) // Pass the video URL to the handler
+		return handleSubtitlesCommand(args[0], env)
 	},
 }
