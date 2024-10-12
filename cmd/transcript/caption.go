@@ -1,7 +1,7 @@
 /*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
+Copyright © 2024 Yogesh Kulkarni <yogeshcodes@zohomail.in>
 */
-package cmd
+package caption
 
 import (
 	"context"
@@ -19,12 +19,19 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/transcribe"
 	"github.com/aws/aws-sdk-go-v2/service/transcribe/types"
+	lpsumsegconfig "github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/config"
 	"github.com/spf13/cobra"
 )
 
 // Path in S3
 var s3InputVideoPath = "videos/process.mp4"
 var s3OutputTranscriptionPath = "transcriptions/"
+
+type transcribeParams struct {
+	transcriptionJobName string
+	inputBucketName      string
+	outputBucketName     string
+}
 
 // Global variable to hold the transcription result
 var transcriptionResult struct {
@@ -39,13 +46,21 @@ var transcriptionResult struct {
 	lastProcessedVideoFile string
 }
 
-func loadAWSConfig() (aws.Config, error) {
+func newTranscribeParams() *transcribeParams {
+	return &transcribeParams{
+		transcriptionJobName: "GetCaptionsAndSubtitlesTranscriptionJob",
+		inputBucketName:      "lpvideouploader",
+		outputBucketName:     "lpvideouploader",
+	}
+}
+
+func loadAWSConfig(env *lpsumsegconfig.Config) (aws.Config, error) {
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithCredentialsProvider(
 			aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(
-				cfg.AWS_ACCESS_KEY_ID_Key,
-				cfg.AWS_SECRET_ACCESS_KEY_Key,
+				env.AWS_ACCESS_KEY_ID_Key,
+				env.AWS_SECRET_ACCESS_KEY_Key,
 				"")),
 		))
 	if err != nil {
@@ -203,11 +218,11 @@ func deleteTranscriptionJob(transcribeClient *transcribe.Client, jobName string)
 	return nil
 }
 
-func createTranscriptionJob(transcribeClient *transcribe.Client, inputBucketName, videoFileName, outputBucketName, jobName string) (string, error) {
+func createTranscriptionJob(transcribeClient *transcribe.Client, tcparams *transcribeParams, videoFileName string) (string, error) {
 
 	// Check if transcription job already exists, if yes delete it
 
-	getResult, err := transcribeClient.GetTranscriptionJob(context.TODO(), &transcribe.GetTranscriptionJobInput{TranscriptionJobName: aws.String(jobName)})
+	getResult, err := transcribeClient.GetTranscriptionJob(context.TODO(), &transcribe.GetTranscriptionJobInput{TranscriptionJobName: aws.String(tcparams.transcriptionJobName)})
 
 	// As there is no error, such a job already exists , so we must first delete it and then create a new one
 	if err == nil && getResult.TranscriptionJob != nil {
@@ -217,7 +232,7 @@ func createTranscriptionJob(transcribeClient *transcribe.Client, inputBucketName
 			log.Fatalf("createTranscriptionJob: Error deleting transcription job: %v", err)
 			return "", fmt.Errorf("createTranscriptionJob: Error deleting transcription job: %v", err)
 		}
-		fmt.Printf("createTranscriptionJob: Deleted existing Transcription job: %s\n", jobName)
+		fmt.Printf("createTranscriptionJob: Deleted existing Transcription job: %s\n", tcparams.transcriptionJobName)
 	} else if err != nil {
 		// If the error is anything other than job not found, handle it
 		/*return "", fmt.Errorf("createTranscriptionJob: failed to get transcription job: %v", err)*/
@@ -227,16 +242,16 @@ func createTranscriptionJob(transcribeClient *transcribe.Client, inputBucketName
 	// if err is not nil , means such a job does not exist and we can continue creating it directly
 	// Prepare the input parameters for the transcription job
 	input := &transcribe.StartTranscriptionJobInput{
-		TranscriptionJobName: aws.String(jobName),
+		TranscriptionJobName: aws.String(tcparams.transcriptionJobName),
 		LanguageCode:         "en-US", // Change as needed
-		Media:                &types.Media{MediaFileUri: aws.String(fmt.Sprintf("s3://%s/%s", inputBucketName, videoFileName))},
+		Media:                &types.Media{MediaFileUri: aws.String(fmt.Sprintf("s3://%s/%s", tcparams.inputBucketName, videoFileName))},
 		Subtitles: &types.Subtitles{
 			Formats: []types.SubtitleFormat{
 				types.SubtitleFormatSrt,
 			},
 			OutputStartIndex: aws.Int32(1),
 		},
-		OutputBucketName: aws.String(outputBucketName),
+		OutputBucketName: aws.String(tcparams.outputBucketName),
 		OutputKey:        aws.String("transcriptions/"),
 	}
 	// Start a transcription job
@@ -272,11 +287,12 @@ func getInputFileSize(fileURL string) (int64, error) {
 	return size, nil
 }
 
-func processTranscription(inputBucketName, videoFileURL, outputBucketName, jobName string) error {
+func processTranscription(tcParams *transcribeParams, videoFileURL string, env *lpsumsegconfig.Config) error {
 	if transcriptionResult.transcriptionProcessed {
 		return nil // Return already processed result
 	}
-	cfg, err := loadAWSConfig()
+
+	cfg, err := loadAWSConfig(env)
 	if err != nil {
 		return fmt.Errorf("failed to load AWS config: %v", err)
 	}
@@ -293,7 +309,7 @@ func processTranscription(inputBucketName, videoFileURL, outputBucketName, jobNa
 	// Upload the MP4 file to S3
 	//fileURL, err := uploadToS3(s3Client, inputBucketName, videoFileURL)
 	// Step 2: Stream the MP4 file from the URL to S3
-	err = streamToS3(s3Client, videoFileURL, inputBucketName, contentLength)
+	err = streamToS3(s3Client, videoFileURL, tcParams.inputBucketName, contentLength)
 	if err != nil {
 		return fmt.Errorf("failed to upload file: %v", err)
 	}
@@ -301,7 +317,7 @@ func processTranscription(inputBucketName, videoFileURL, outputBucketName, jobNa
 
 	//Create Transcription Job
 
-	jobID, err := createTranscriptionJob(transcribeClient, inputBucketName, s3InputVideoPath, outputBucketName, jobName)
+	jobID, err := createTranscriptionJob(transcribeClient, tcParams, s3InputVideoPath)
 	if err != nil {
 		return fmt.Errorf("error creating transcription job: %v", err)
 	}
@@ -316,7 +332,7 @@ func processTranscription(inputBucketName, videoFileURL, outputBucketName, jobNa
 
 	srtFileKey := fmt.Sprintf("%s.srt", jobID) // Assuming the output file is named after the job ID with a .json extension
 
-	err = readTranscriptionResult(s3Client, outputBucketName, jsonFileKey, srtFileKey)
+	err = readTranscriptionResult(s3Client, tcParams.outputBucketName, jsonFileKey, srtFileKey)
 	if err != nil {
 		return fmt.Errorf("error reading transcription result: %v", err)
 	}
@@ -325,13 +341,11 @@ func processTranscription(inputBucketName, videoFileURL, outputBucketName, jobNa
 	return nil
 }
 
-func handleCaptionCommand(videoURL string) error {
+func handleCaptionCommand(videoURL string, env *lpsumsegconfig.Config) error {
 
-	inputBucketName := "lpvideouploader"
-	outputBucketName := "lpvideouploader"
-	jobName := "GetCaptionsAndSubtitlesTranscriptionJob"
+	tcParams := newTranscribeParams()
 
-	err := processTranscription(inputBucketName, videoURL, outputBucketName, jobName)
+	err := processTranscription(tcParams, videoURL, env)
 	if err != nil {
 		return err
 	}
@@ -341,12 +355,10 @@ func handleCaptionCommand(videoURL string) error {
 	return nil
 }
 
-func handleSubtitlesCommand(videoURL string) error {
-	inputBucketName := "lpvideouploader"
-	outputBucketName := "lpvideouploader"
-	jobName := "GetCaptionsAndSubtitlesTranscriptionJob"
+func handleSubtitlesCommand(videoURL string, env *lpsumsegconfig.Config) error {
+	tcParams := newTranscribeParams()
 
-	err := processTranscription(inputBucketName, videoURL, outputBucketName, jobName)
+	err := processTranscription(tcParams, videoURL, env)
 	if err != nil {
 		return err
 	}
@@ -357,12 +369,10 @@ func handleSubtitlesCommand(videoURL string) error {
 	return nil
 }
 
-func handleSummaryCommand(videoURL string) error {
-	inputBucketName := "lpvideouploader"
-	outputBucketName := "lpvideouploader"
-	jobName := "GetCaptionsAndSubtitlesTranscriptionJob"
+func handleSummaryCommand(videoURL string, env *lpsumsegconfig.Config) error {
+	tcParams := newTranscribeParams()
 
-	err := processTranscription(inputBucketName, videoURL, outputBucketName, jobName)
+	err := processTranscription(tcParams, videoURL, env)
 	if err != nil {
 		return err
 	}
@@ -373,35 +383,45 @@ func handleSummaryCommand(videoURL string) error {
 	return nil
 }
 
-var captionCmd = &cobra.Command{
+var CaptionCmd = &cobra.Command{
 	Use:   "caption [videoURL]",
 	Short: "Generate caption for video",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handleCaptionCommand(args[0]) // Pass the video URL to the handler
+		env, ok := cmd.Context().Value(lpsumsegconfig.ConfigKey("config")).(*lpsumsegconfig.Config) // Retrieve config from context
+
+		if !ok {
+			return fmt.Errorf("asset:failed to retrieve config from context")
+		}
+
+		return handleCaptionCommand(args[0], env) // Pass the video URL to the handler
 	},
 }
 
-var subtitlesCmd = &cobra.Command{
+var SubtitlesCmd = &cobra.Command{
 	Use:   "subtitles [videoURL]",
 	Short: "Generate subtitles for video",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handleSubtitlesCommand(args[0])
+		env, ok := cmd.Context().Value(lpsumsegconfig.ConfigKey("config")).(*lpsumsegconfig.Config) // Retrieve config from context
+
+		if !ok {
+			return fmt.Errorf("asset:failed to retrieve config from context")
+		}
+
+		return handleSubtitlesCommand(args[0], env)
 	},
 }
 
-var summaryCmd = &cobra.Command{
+var SummaryCmd = &cobra.Command{
 	Use:   "summary [videoURL]",
 	Short: "Generate summary of video",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handleSummaryCommand(args[0])
+		env, ok := cmd.Context().Value(lpsumsegconfig.ConfigKey("config")).(*lpsumsegconfig.Config) // Retrieve config from context
+
+		if !ok {
+			return fmt.Errorf("asset:failed to retrieve config from context")
+		}
+
+		return handleSummaryCommand(args[0], env)
 	},
-}
-
-func init() {
-	//rootCmd.AddCommand(captionCmd)
-
-	rootCmd.AddCommand(captionCmd)
-	rootCmd.AddCommand(subtitlesCmd)
-	rootCmd.AddCommand(summaryCmd)
 }

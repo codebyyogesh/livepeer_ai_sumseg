@@ -1,7 +1,7 @@
 /*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
+Copyright © 2024 Yogesh Kulkarni <yogeshcodes@zohomail.in>
 */
-package cmd
+package asset
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 
+	lpsumsegconfig "github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/config"
 	livepeergo "github.com/livepeer/livepeer-go"
 	"github.com/livepeer/livepeer-go/models/sdkerrors"
 	"github.com/spf13/cobra"
@@ -17,13 +18,14 @@ import (
 // Set the playback ID of your uploaded asset
 var playbackID = `de93swf0r2g7tlrz` // Replace with your actual playback ID
 // assetCmd represents the asset command
-var assetCmd = &cobra.Command{
+var AssetCmd = &cobra.Command{
 	Use:   "asset",
 	Short: "A asset playback",
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("asset called")
-		if cfg == nil {
-			log.Fatal("Configuration not loaded properly")
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cfg, ok := cmd.Context().Value(lpsumsegconfig.ConfigKey("config")).(*lpsumsegconfig.Config) // Retrieve config from context
+
+		if !ok {
+			return fmt.Errorf("asset:failed to retrieve config from context")
 		}
 		lpClient := livepeergo.New(
 			livepeergo.WithSecurity(cfg.LP_AI_API_Key),
@@ -35,26 +37,13 @@ var assetCmd = &cobra.Command{
 		if err != nil {
 			var sdkErr *sdkerrors.Error
 			if errors.As(err, &sdkErr) {
-				log.Fatalf("Error retrieving playback info: %s", sdkErr.Error())
+				return fmt.Errorf("error retrieving playback info: %s", sdkErr.Error())
 			}
 			log.Fatalf("Unexpected error: %s", err)
 		}
 
 		// Print the playback URL
 		fmt.Printf("Playback URL: %+v\n", playbackInfo.PlaybackInfo)
+		return nil
 	},
-}
-
-func init() {
-	rootCmd.AddCommand(assetCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// assetCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// assetCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

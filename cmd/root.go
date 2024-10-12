@@ -4,78 +4,65 @@ Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"context"
 	"log"
 	"os"
 
+	"github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/asset"
+	lpsumsegconfig "github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/config"
+	"github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/stream"
+	caption "github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/transcript"
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 )
 
-var cfg *Config // Global configuration
-
 // Config structure to hold environment variables
-type Config struct {
-	LP_AI_API_Key             string
-	HF_VIDEO_TO_TEXT_API_Key  string
-	AWS_ACCESS_KEY_ID_Key     string
-	AWS_SECRET_ACCESS_KEY_Key string
-	AWS_REGION                string
-}
 
 // rootCmd represents the base command when called without any subcommands
-var rootCmd = &cobra.Command{
+var RootCmd = &cobra.Command{
 	Use:   "lp_ai_sumseg",
 	Short: "AI CLI tool to get captions, subtitles and summarize video",
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Load configuration before any command is executed
+		err := godotenv.Load()
+		if err != nil {
+			log.Fatal("Error loading .env file")
+		}
+		if err != nil {
+			log.Fatalf("Error loading .env file: %v", err)
+		}
+		cfg := lpsumsegconfig.LoadConfig() // Assuming LoadConfig is a function that loads your config
+		if cfg == nil {
+			log.Fatal("Failed to load configuration")
+		}
+		cmd.SetContext(context.WithValue(cmd.Context(), lpsumsegconfig.ConfigKey("config"), cfg)) // Store config in context
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	err := rootCmd.Execute()
+	err := RootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
 	}
 }
 
 // Load the API key from the environment
-func LoadConfig() *Config {
-	lpApiKey := os.Getenv("LP_AI_API_KEY")
-	hfVidToTextApiKey := os.Getenv("HF_VIDEO_TO_TEXT_API_KEY")
-	awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
-	awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-	awsRegion := os.Getenv("AWS_REGION")
-
-	if lpApiKey == "" || hfVidToTextApiKey == "" || awsAccessKey == "" || awsSecretKey == "" || awsRegion == "" {
-		log.Fatal("LP_AI_API_KEY or HF_VIDEO_TO_TEXT_API_KEY or AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY or AWS_REGION is not set in the environment")
-
-	}
-
-	return &Config{
-		LP_AI_API_Key:             lpApiKey,
-		HF_VIDEO_TO_TEXT_API_Key:  hfVidToTextApiKey,
-		AWS_ACCESS_KEY_ID_Key:     awsAccessKey,
-		AWS_SECRET_ACCESS_KEY_Key: awsSecretKey,
-		AWS_REGION:                awsRegion,
-	}
-}
 
 func init() {
 	// Load configuration in the root command
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file")
-	}
-	cfg = LoadConfig()
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
 
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.livepeer_ai_sumseg.git.yaml)")
+	// Add subcommands
+	RootCmd.AddCommand(asset.AssetCmd)       // Register asset command
+	RootCmd.AddCommand(stream.StreamCmd)     // Register stream command
+	RootCmd.AddCommand(caption.CaptionCmd)   // Register caption command
+	RootCmd.AddCommand(caption.SubtitlesCmd) // Register subtitles command
+	RootCmd.AddCommand(caption.SummaryCmd)   // Register summary command
+	// Add other commands as needed
+	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
