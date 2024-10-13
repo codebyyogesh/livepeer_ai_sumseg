@@ -46,14 +46,21 @@ var transcriptionResult struct {
 	lastProcessedVideoFile string
 }
 
-func newTranscribeParams() *transcribeParams {
-	return &transcribeParams{
+func newTranscribeParams(env *lpsumsegconfig.Config) (*transcribeParams, error) {
+	cfg, err := loadAWSConfig(env)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AWS config: %v", err)
+	}
+
+	return (&transcribeParams{
 		transcriptionJobName:      "GetCaptionsAndSubtitlesTranscriptionJob",
 		inputBucketName:           "lpvideouploader",
 		outputBucketName:          "lpvideouploader",
 		s3InputVideoPath:          "videos/process.mp4",
 		s3OutputTranscriptionPath: "transcriptions/",
-	}
+		s3Client:                  s3.NewFromConfig(cfg),
+		transcribeClient:          transcribe.NewFromConfig(cfg),
+	}), nil
 }
 
 func loadAWSConfig(env *lpsumsegconfig.Config) (aws.Config, error) {
@@ -285,22 +292,9 @@ func createTranscriptionJob(params *transcribeParams) (string, error) {
 	return *startResult.TranscriptionJob.TranscriptionJobName, nil // Return job name or handle as needed
 }
 
-func processTranscription(params *transcribeParams, videoFileURL string, env *lpsumsegconfig.Config) error {
+func processTranscription(params *transcribeParams, videoFileURL string) error {
 	if transcriptionResult.transcriptionProcessed {
 		return nil // Return already processed result
-	}
-	/*
-		cfg, err := loadAWSConfig(env)
-		if err != nil {
-			return fmt.Errorf("failed to load AWS config: %v", err)
-		}
-		s3Client := s3.NewFromConfig(cfg)
-		transcribeClient := transcribe.NewFromConfig(cfg)
-	*/
-
-	err := createAWSClients(params, env)
-	if err != nil {
-		return fmt.Errorf("failed to create AWS clients: %v", err)
 	}
 	// Step 1: Fetch the content length (file size) from URL
 	contentLength, err := getInputFileSize(videoFileURL)
@@ -309,7 +303,6 @@ func processTranscription(params *transcribeParams, videoFileURL string, env *lp
 	}
 	fmt.Printf("Content-Length: %d bytes\n", contentLength)
 
-	// Upload the MP4 file to S3
 	//fileURL, err := uploadToS3(s3Client, inputBucketName, videoFileURL)
 	// Step 2: Stream the MP4 file from the URL to S3
 	err = streamToS3(params, videoFileURL, contentLength)
@@ -341,15 +334,5 @@ func processTranscription(params *transcribeParams, videoFileURL string, env *lp
 	}
 	transcriptionResult.transcriptionProcessed = true // Mark as processed
 	transcriptionResult.lastProcessedVideoFile = videoFileURL
-	return nil
-}
-
-func createAWSClients(params *transcribeParams, env *lpsumsegconfig.Config) error {
-	cfg, err := loadAWSConfig(env)
-	if err != nil {
-		return fmt.Errorf("failed to load AWS config: %v", err)
-	}
-	params.s3Client = s3.NewFromConfig(cfg)
-	params.transcribeClient = transcribe.NewFromConfig(cfg)
 	return nil
 }

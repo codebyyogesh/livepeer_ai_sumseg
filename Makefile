@@ -1,6 +1,6 @@
 CC=go
 GO_BUILD_FLAGS=-trimpath
-PROJECT_NAME=lp_ai_sumseg
+PROJECT_NAME=lpaisumseg
 build:
 	$(CC) build -o bin/$(PROJECT_NAME) $(GO_BUILD_FLAGS) .
 

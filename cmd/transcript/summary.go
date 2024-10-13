@@ -8,9 +8,12 @@ import (
 )
 
 func handleSummaryCommand(videoURL string, env *lpsumsegconfig.Config) error {
-	tcParams := newTranscribeParams()
+	tcParams, err := newTranscribeParams(env)
+	if err != nil {
+		return err
+	}
 
-	err := processTranscription(tcParams, videoURL, env)
+	err = processTranscription(tcParams, videoURL)
 	if err != nil {
 		return err
 	}
