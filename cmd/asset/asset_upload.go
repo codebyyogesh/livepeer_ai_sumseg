@@ -2,6 +2,7 @@ package asset
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -112,7 +113,6 @@ var AssetUploadCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		// get the IPFS link
 
 		// Poll the status of the asset until the IPFS storage is completed
 
@@ -141,19 +141,61 @@ var AssetUploadCmd = &cobra.Command{
 			time.Sleep(10 * time.Second)
 		}
 
-		// Once the storage is complete, get the IPFS metadata
+		// Once the storage is complete
 		finalAssetRes, err := s.Asset.Get(ctx, assetID)
 		if err != nil {
 			log.Fatal("Failed to retrieve asset after storage completion: ", err)
 		}
 
-		// Print IPFS CID and URL
+		// Print  URL
 		if finalAssetRes.Asset.Storage != nil && finalAssetRes.Asset.Storage.Ipfs != nil && finalAssetRes.Asset.Storage.Ipfs.NftMetadata != nil {
 			assetDownloadURL := finalAssetRes.Asset.GetDownloadURL()
 			fmt.Printf("Asset URL link: %+v\n", *assetDownloadURL)
 
+			// Incase you want to pass the ipfs link to another command
+			// Retrieve IPFS Metadata using CID
+			ipfsCID := finalAssetRes.Asset.Storage.Ipfs.NftMetadata.Cid
+			// Construct IPFS URL to fetch metadata
+			ipfsMetadataURL := fmt.Sprintf("https://ipfs.io/ipfs/%s", ipfsCID)
+			// Fetch metadata from IPFS
+			resp, err = http.Get(ipfsMetadataURL)
+			if err != nil {
+				log.Fatalf("Failed to fetch IPFS metadata: %v", err)
+			}
+
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body) // Read response body for debugging
+				return fmt.Errorf("failed to fetch IPFS metadata with status %s: %s", resp.Status, body)
+			}
+			// Read and print out IPFS metadata JSON
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			// Define a struct to match the IPFS metadata structure
+			type IpfsMetadata struct {
+				AnimationURL string `json:"animation_url"`
+				Description  string `json:"description"`
+				Image        string `json:"image"`
+				Name         string `json:"name"`
+			}
+
+			// After logging the IPFS Metadata JSON
+			var metadata IpfsMetadata
+			// Unmarshal the JSON into the struct
+			err = json.Unmarshal(bodyBytes, &metadata)
+			if err != nil {
+				log.Fatalf("Failed to unmarshal IPFS metadata: %v", err)
+			}
+			// Access the animation_url
+			if metadata.AnimationURL != "" {
+				// Remove the "ipfs://" prefix
+				cid := metadata.AnimationURL[len("ipfs://"):] // Extract CID
+
+				// Construct the full IPFS link
+				ipfsAssetURL := fmt.Sprintf("https://ipfs.io/ipfs/%s", cid)
+				log.Printf("IPFS Asset URL Link: %s", ipfsAssetURL)
+			}
 		} else {
-			log.Println("No IPFS metadata found.")
+			log.Println("No Download URL found.")
 		}
 		return nil
 	},
