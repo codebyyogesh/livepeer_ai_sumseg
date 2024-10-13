@@ -57,11 +57,12 @@ func init() {
 	// Load configuration in the root command
 
 	// Add subcommands
-	RootCmd.AddCommand(asset.AssetCmd)       // Register asset command
-	RootCmd.AddCommand(stream.StreamCmd)     // Register stream command
-	RootCmd.AddCommand(caption.CaptionCmd)   // Register caption command
-	RootCmd.AddCommand(caption.SubtitlesCmd) // Register subtitles command
-	RootCmd.AddCommand(caption.SummaryCmd)   // Register summary command
+	RootCmd.AddCommand(asset.AssetPlaybackCmd) // Register asset command
+	RootCmd.AddCommand(asset.AssetUploadCmd)   // Register asset command
+	RootCmd.AddCommand(stream.StreamCmd)       // Register stream command
+	RootCmd.AddCommand(caption.CaptionCmd)     // Register caption command
+	RootCmd.AddCommand(caption.SubtitlesCmd)   // Register subtitles command
+	RootCmd.AddCommand(caption.SummaryCmd)     // Register summary command
 	// Add other commands as needed
 	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
