@@ -63,6 +63,7 @@ func init() {
 	RootCmd.AddCommand(caption.CaptionCmd)     // Register caption command
 	RootCmd.AddCommand(caption.SubtitlesCmd)   // Register subtitles command
 	RootCmd.AddCommand(caption.SummaryCmd)     // Register summary command
+	RootCmd.AddCommand(caption.SegmentsCmd)    // Register segments command
 	// Add other commands as needed
 	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 

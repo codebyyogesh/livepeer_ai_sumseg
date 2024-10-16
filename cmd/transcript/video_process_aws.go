@@ -19,10 +19,6 @@ import (
 	lpsumsegconfig "github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/config"
 )
 
-// Path in S3
-//var s3InputVideoPath = "videos/process.mp4"
-//var s3OutputTranscriptionPath = "transcriptions/"
-
 type transcribeParams struct {
 	transcriptionJobName      string
 	inputBucketName           string
@@ -42,28 +38,33 @@ var transcriptionResult struct {
 	} `json:"results"`
 	Subtitles              string // To hold subtitle content
 	Summary                string // To hold summary content
+	Segments               string // To hold video segments
 	transcriptionProcessed bool
 	lastProcessedVideoFile string
 }
 
 func newTranscribeParams(env *lpsumsegconfig.Config) (*transcribeParams, error) {
-	cfg, err := loadAWSConfig(env)
+	cfg, err := initAWSEnv(env)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %v", err)
 	}
-
+	// Load user-defined configurations from the config file using Viper
+	userAWSConfig, err := lpsumsegconfig.LoadAWSConfig() // Call the LoadConfig function
+	if err != nil {
+		return nil, fmt.Errorf("failed to load user config: %v", err)
+	}
 	return (&transcribeParams{
 		transcriptionJobName:      "GetCaptionsAndSubtitlesTranscriptionJob",
-		inputBucketName:           "lpvideouploader",
-		outputBucketName:          "lpvideouploader",
-		s3InputVideoPath:          "videos/process.mp4",
-		s3OutputTranscriptionPath: "transcriptions/",
+		inputBucketName:           userAWSConfig.InputBucketName,
+		outputBucketName:          userAWSConfig.OutputBucketName,
+		s3InputVideoPath:          userAWSConfig.S3InputVideoPath,
+		s3OutputTranscriptionPath: userAWSConfig.S3OutputTranscriptionPath,
 		s3Client:                  s3.NewFromConfig(cfg),
 		transcribeClient:          transcribe.NewFromConfig(cfg),
 	}), nil
 }
 
-func loadAWSConfig(env *lpsumsegconfig.Config) (aws.Config, error) {
+func initAWSEnv(env *lpsumsegconfig.Config) (aws.Config, error) {
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithCredentialsProvider(
@@ -137,7 +138,6 @@ func streamToS3(params *transcribeParams, ipfsURL string, contentLength int64) e
 		Body:          resp.Body,                // Streaming the content directly to S3
 		ContentLength: aws.Int64(contentLength), // Optional: Set the content length for the contentLength,
 	}
-	fmt.Printf("Uploading %s to %s/%s\n", ipfsURL, params.inputBucketName, params.s3InputVideoPath)
 	// Upload the file to S3
 	_, err = params.s3Client.PutObject(context.TODO(), input)
 	if err != nil {
@@ -168,10 +168,10 @@ func checkTranscriptionJobStatus(params *transcribeParams, jobName string) error
 			return fmt.Errorf("failed to get transcription job status: %v", err)
 		}
 		status := result.TranscriptionJob.TranscriptionJobStatus
-		fmt.Printf("Current status of job %s: %s\n", jobName, status)
+		fmt.Printf("Current status : %s\n", status)
 
 		if status == "COMPLETED" {
-			fmt.Printf("Transcription completed! Results available at: %s\n", *result.TranscriptionJob.Transcript.TranscriptFileUri)
+			fmt.Printf("Transcription completed!")
 			break
 		} else if status == "FAILED" {
 			fmt.Printf("Transcription job failed. Reason: %s\n", *result.TranscriptionJob.FailureReason)
@@ -262,7 +262,8 @@ func createTranscriptionJob(params *transcribeParams) (string, error) {
 			log.Fatalf("createTranscriptionJob: Error deleting transcription job: %v", err)
 			return "", fmt.Errorf("createTranscriptionJob: Error deleting transcription job: %v", err)
 		}
-		fmt.Printf("createTranscriptionJob: Deleted existing Transcription job: %s\n", params.transcriptionJobName)
+		/*fmt.Printf("createTranscriptionJob: Deleted existing Transcription job: %s\n", params.transcriptionJobName)
+		 */
 	} else if err != nil {
 		// If the error is anything other than job not found, handle it
 		log.Printf("createTranscriptionJob: failed to get transcription job: %v", err)
@@ -288,7 +289,8 @@ func createTranscriptionJob(params *transcribeParams) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("createTranscriptionJob: failed to start transcription job: %v", err)
 	}
-	fmt.Printf("createTranscriptionJob: Started transcription job: %s\n", *startResult.TranscriptionJob.TranscriptionJobName)
+	/*fmt.Printf("createTranscriptionJob: Started transcription job: %s\n", *startResult.TranscriptionJob.TranscriptionJobName)
+	 */
 	return *startResult.TranscriptionJob.TranscriptionJobName, nil // Return job name or handle as needed
 }
 
@@ -318,7 +320,7 @@ func processTranscription(params *transcribeParams, videoFileURL string) error {
 		return fmt.Errorf("error creating transcription job: %v", err)
 	}
 
-	fmt.Printf("Transcription job created successfully with ID: %s\n", jobID)
+	//fmt.Printf("Transcription job created successfully with ID: %s\n", jobID)
 
 	err = checkTranscriptionJobStatus(params, jobID) // Check the status of the transcription job
 	if err != nil {

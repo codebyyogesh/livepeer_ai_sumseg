@@ -2,6 +2,8 @@ package caption
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/Kardbord/hfapigo/v3"
@@ -9,10 +11,53 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func writeSummaryToFile(summary string) error {
+	// Get the path of the executable
+	exePath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %v", err)
+	}
+
+	// Get the directory of the executable
+	exeDir := filepath.Dir(exePath)
+
+	// Define the path to the bin directory
+	binDir := filepath.Join(exeDir, "..", "bin") // Go up one level and then into bin
+
+	// Check if bin directory exists; if not, use current working directory
+	if _, err := os.Stat(binDir); os.IsNotExist(err) {
+		// If bin directory doesn't exist, use current working directory
+		cwd, _ := os.Getwd()
+		binDir = filepath.Join(cwd, "bin")
+	}
+
+	// Create the bin directory if it doesn't exist
+	if err := os.MkdirAll(binDir, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create bin directory: %v", err)
+	}
+
+	// Define the full path for the summary file
+	summaryFilePath := filepath.Join(binDir, "summary.txt")
+
+	// Create or open the summary file for writing
+	file, err := os.Create(summaryFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to create summary file: %v", err)
+	}
+	defer file.Close() // Ensure the file is closed after writing
+
+	// Write summary to the file
+	if _, err := file.WriteString(summary); err != nil {
+		return fmt.Errorf("failed to write summary to file: %v", err)
+	}
+
+	fmt.Printf("Summary written to %s\n", summaryFilePath)
+	return nil
+}
+
 func summarizeTranscript(inputs []string, env *lpsumsegconfig.Config) ([]string, error) {
 	hfapigo.SetAPIKey(env.HF_TEXT_SUMMARY_API_Key)
-	fmt.Printf("\nSending request")
-
+	fmt.Printf("Summarizing transcript\n")
 	type ChanRv struct {
 		resps []*hfapigo.SummarizationResponse
 		err   error
@@ -70,8 +115,8 @@ func handleSummaryCommand(videoURL string, env *lpsumsegconfig.Config) error {
 		return err
 	}
 	transcriptionResult.Summary = summary[0]
-	fmt.Println("Summary Content:")
-	fmt.Println(transcriptionResult.Summary)
+
+	writeSummaryToFile(transcriptionResult.Summary)
 
 	return nil
 }
