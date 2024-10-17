@@ -1,6 +1,0 @@
-{
-    "input_bucket_name": "livepeer",
-    "output_bucket_name": "livepeer",
-    "s3_input_video_path": "input/process.mp4",
-    "s3_output_transcription_path": "transcribe/"
-}
