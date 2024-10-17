@@ -28,6 +28,7 @@ A command-line interface (CLI) tool to transcribe, summarize, subtitles and segm
    cd livepeer_ai_sumseg
    ```
 2. Create a .env file ( or use an example .env.local file and rename it to .env). Ensure that you set up the following environment variables:
+
    | Variable Name | Description |
 
    -----------------------------------------------------------------------------|
