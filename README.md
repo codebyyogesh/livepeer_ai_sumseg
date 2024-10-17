@@ -85,8 +85,8 @@ AWS_REGION=""
 
 **PS**
 
-Bucket Creation: You need to create an S3 bucket named livepeer. This bucket will be used for both input and output.
+**Bucket Creation**: You need to create an S3 bucket named livepeer. This bucket will be used for both input and output.
 
-Input Folder: Inside the livepeer bucket, create a folder named input. Your input videos will always be copied as process.mp4 in this folder. Note that the CLI tool processes only one video at a time.
+**Input Folder**: Inside the livepeer bucket, create a folder named input. Your input videos will always be copied as process.mp4 in this folder. Note that the CLI tool processes only one video at a time.
 
-Output Folder: Create another folder named transcribe inside the livepeer bucket. This folder will be used to store the transcription output. Ensure that the folder name ends with a slash (/) in your configuration.
+**Output Folder**: Create another folder named transcribe inside the livepeer bucket. This folder will be used to store the transcription output. Ensure that the folder name ends with a slash (/) in your configuration.
