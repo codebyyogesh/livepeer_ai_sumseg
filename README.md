@@ -29,30 +29,46 @@ A command-line interface (CLI) tool to transcribe, summarize, subtitles and segm
    ```
 2. Create a .env file ( or use an example .env.local file and rename it to .env). Ensure that you set up the following environment variables:
    | Variable Name | Description |
+
    -----------------------------------------------------------------------------|
+
    | `LP_AI_API_KEY` | Livepeer API key from [livepeer.studio](https://livepeer.studio) |
+
    | `HF_TEXT_SUMMARY_API_KEY` | Hugging Face token key from [Hugging Face](https://huggingface.co/) |
+
    | `AWS_ACCESS_KEY_ID` | AWS access key from Amazon AWS IAM (Identity Management https://aws.amazon.com/iam/) |
+
    | `AWS_SECRET_ACCESS_KEY` | AWS secret access key from Amazon AWS IAM |
+
    | `AWS_REGION` | The AWS region where your resources are located |
 
 ## Example `.env` File
 
 ```
 LP_AI_API_KEY=""
+
 HF_TEXT_SUMMARY_API_KEY=""
+
 AWS_ACCESS_KEY_ID=""
+
 AWS_SECRET_ACCESS_KEY=""
+
 AWS_REGION=""
 
 ```
 
 3.  Use the example aws_config_example.json and rename it to aws_config.json. Ensure that you set up the following aws variables:
 
-| Variable Name | Description ----------------------------------------------------------------------------------- |
+| Variable Name | Description
+
+----------------------------------------------------------------------------------- |
+
 | `input_bucket_name` | Bucket name in aws s3 for input videos |
+
 | `output_bucket_name` | Bucket name in aws s3 for output videos|
+
 | `s3_input_video_path` | Folder name in aws s3 for storing input videos|
+
 | `s3_output_transcription_path` | Folder name in aws s3 for storing output or processed videos|
 
 ## Example `aws_config` File
