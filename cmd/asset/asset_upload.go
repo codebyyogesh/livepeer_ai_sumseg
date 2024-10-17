@@ -123,13 +123,13 @@ var AssetUploadCmd = &cobra.Command{
 			}
 
 			if assetRes.Asset.Storage == nil || assetRes.Asset.Storage.Status == nil {
-				log.Println("Storage or Status is not available yet. Retrying...")
+				log.Println("Storage status is not available yet. Retrying...")
 				time.Sleep(10 * time.Second) // Wait before polling again
 				continue
 			}
 
 			storageStatus := assetRes.Asset.Storage.Status
-			log.Printf("Current storage status phase: %s", storageStatus.Phase)
+			log.Printf("Storage status: %s", storageStatus.Phase)
 			if storageStatus.Phase == "ready" {
 				log.Println("Store to IPFS completed!")
 				break
