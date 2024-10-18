@@ -1,76 +1,53 @@
 /*
 Copyright © 2024 Yogesh Kulkarni <yogeshcodes@zohomail.in>
 */
-package cmd
+package text_to_image
 
 import (
 	"context"
+	"fmt"
 	"log"
 
+	lpsumsegconfig "github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/config"
 	livepeeraigo "github.com/livepeer/livepeer-ai-go"
 	"github.com/livepeer/livepeer-ai-go/models/components"
 	"github.com/spf13/cobra"
 )
 
-func ptr(s string) *string {
-	return &s
-}
-
 // serveCmd represents the serve command
-var textToImageCmd = &cobra.Command{
-	Use:   "textToImage",
-	Short: "LP: text to image generator",
-	Run: func(cmd *cobra.Command, args []string) {
-		// Use the API key loaded in root.go
-		if cfg == nil {
-			log.Fatal("Configuration not loaded properly")
+var TextToImageCmd = &cobra.Command{
+	Use:   "texttoimage [prompt]",
+	Short: "Generate text to image",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		env, ok := cmd.Context().Value(lpsumsegconfig.ConfigKey("config")).(*lpsumsegconfig.Config) // Retrieve config from context
+
+		if !ok {
+			return fmt.Errorf("asset:failed to retrieve config from context")
 		}
+
+		// Use the API key loaded in root.go
 		s := livepeeraigo.New(
 			// index 0 is for https://dream-gateway.livepeer.cloud
 			livepeeraigo.WithServerIndex(0), // for https://livepeer.studio/api/beta/generate
 
-			livepeeraigo.WithSecurity(cfg.LP_AI_API_Key),
+			livepeeraigo.WithSecurity(env.LP_AI_API_Key),
 		)
 		ctx := context.Background()
 		res, err := s.Generate.TextToImage(ctx, components.TextToImageParams{
 			// SG161222/RealVisXL_V4.0_Lightning:
 			// ByteDance/SDXL-Lightning
-			ModelID: ptr("ByteDance/SDXL-Lightning"),
-			Prompt:  "A puppy dog sleeping on a sofa",
+			ModelID: livepeeraigo.String("ByteDance/SDXL-Lightning"),
+			Prompt:  args[0],
 		},
-		/*			operations.WithRetries(
-					retry.Config{
-						Strategy: "backoff",
-						Backoff: &retry.BackoffStrategy{
-							InitialInterval: 1,
-							MaxInterval:     50,
-							Exponent:        1.1,
-							MaxElapsedTime:  100,
-						},
-						RetryConnectionErrors: false,
-					}),
-		*/
 		)
 		if err != nil {
 			log.Printf("serve error: %+v", err)
 		}
 		if res.ImageResponse != nil {
 			// handle response
-			log.Println("response:", res.ImageResponse)
+			log.Println("response:", res.ImageResponse.Images[0].URL)
 		}
+
+		return nil
 	},
-}
-
-func init() {
-	rootCmd.AddCommand(textToImageCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// serveCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// serveCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
