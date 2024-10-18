@@ -10,6 +10,7 @@ A command-line interface (CLI) tool to transcribe, summarize, subtitles and segm
 - Summarize videos using ai.
 - Subtitles for a video using ai.
 - CLI-based, easy to integrate into existing workflows.
+- Currently videos upto 2 mins are tested manually.
 
 ## Getting started
 
@@ -90,3 +91,27 @@ AWS_REGION=""
 **Input Folder**: Inside the livepeer bucket, create a folder named input. Your input videos will always be copied as process.mp4 in this folder. Note that the CLI tool processes only one video at a time.
 
 **Output Folder**: Create another folder named transcribe inside the livepeer bucket. This folder will be used to store the transcription output. Ensure that the folder name ends with a slash (/) in your configuration.
+
+## Build and Run
+
+From the project root folder, just use the make file to build
+
+```
+make build
+```
+
+This will build the binary (lpaisumseg) in the bin directory. To run the tool, you can run it as
+
+```
+$bin/lpaisumseg -h   --> for help
+$bin/lpaisumseg caption -h --> help for caption cmd
+```
+
+To run a cmd (e.g)
+
+```
+$bin/lpaisumseg caption <VideoURL>  -->generates caption for the video
+```
+
+More details on the commands see wiki
+https://github.com/codebyyogesh/livepeer_ai_sumseg/wiki
