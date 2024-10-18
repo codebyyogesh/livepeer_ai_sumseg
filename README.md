@@ -115,3 +115,23 @@ $bin/lpaisumseg caption <VideoURL>  -->generates caption for the video
 
 More details on the commands see wiki
 https://github.com/codebyyogesh/livepeer_ai_sumseg/wiki
+
+## Issues in the cli tool and livepeer AI apis.
+
+1. Currently cli uploading asset uses polling mechanism to check the updated storage status to ipfs, in future this will be moved to livepeers webhook apis.
+
+2. Once livepeer ai apis provide support for subtitles, summarize, segments for a video, the aws and hugging face apis can be replaced with livepeer ai apis.
+
+3. The livepeer golang ai api image to video does not generate videos of larger length. Currently even experimenting with various params of the api like fps, num_inference_steps etc, yields videos of length only 3-4 secs.
+
+## Upcoming features (v2.0 and above)
+
+- Use livepeer ai apis for captions, summarize and subtitles if supported
+- Upload asset from a url
+- Move to webhooks for getting status updates of storage.
+- Support transcode
+- Delete or remove an asset
+- Multi Stream support
+- Access control
+- Metrics
+- See if the cli features can also be available as a backend abstracted Apis.
