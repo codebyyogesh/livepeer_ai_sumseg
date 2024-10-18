@@ -6,10 +6,12 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	lpsumsegconfig "github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/config"
 	livepeeraigo "github.com/livepeer/livepeer-ai-go"
 	"github.com/livepeer/livepeer-ai-go/models/components"
+	"github.com/livepeer/livepeer-ai-go/models/operations"
 
 	"github.com/spf13/cobra"
 )
@@ -37,7 +39,10 @@ var ImageToVideoCmd = &cobra.Command{
 		)
 		ctx := context.Background()
 		// Make an HTTP GET request
-		response, err := http.Get(args[0])
+		client := &http.Client{
+			Timeout: 180 * time.Second,
+		}
+		response, err := client.Get(args[0])
 		if err != nil {
 			panic(err) // Handle error appropriately in production code
 		}
@@ -58,17 +63,16 @@ var ImageToVideoCmd = &cobra.Command{
 				FileName: args[0],
 				Content:  content,
 			},
-			ModelID:           ptr("stabilityai/stable-video-diffusion-img2vid-xt-1-1"),
-			Fps:               livepeeraigo.Int64(16),
-			NumInferenceSteps: livepeeraigo.Int64(50),
+			ModelID: ptr("stabilityai/stable-video-diffusion-img2vid-xt-1-1"),
 		}
-		res, err := s.Generate.ImageToVideo(ctx, request)
+		res, err := s.Generate.ImageToVideo(ctx, request,
+			operations.WithOperationTimeout(120*time.Second))
 
 		if err != nil {
 			log.Fatal(err)
 		}
 		if res.VideoResponse != nil {
-			fmt.Println("Response:", res.VideoResponse.Images[0].URL)
+			log.Println("Response:", res.VideoResponse.Images[0].URL)
 		}
 		return nil
 	},

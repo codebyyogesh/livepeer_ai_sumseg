@@ -45,7 +45,7 @@ var TextToImageCmd = &cobra.Command{
 		}
 		if res.ImageResponse != nil {
 			// handle response
-			log.Println("response:", res.ImageResponse.Images[0].URL)
+			log.Println("Response:", res.ImageResponse.Images[0].URL)
 		}
 
 		return nil

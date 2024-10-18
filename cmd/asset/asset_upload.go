@@ -158,7 +158,11 @@ var AssetUploadCmd = &cobra.Command{
 			// Construct IPFS URL to fetch metadata
 			ipfsMetadataURL := fmt.Sprintf("https://ipfs.io/ipfs/%s", ipfsCID)
 			// Fetch metadata from IPFS
-			resp, err = http.Get(ipfsMetadataURL)
+			// Create an HTTP client with increased timeout
+			client := &http.Client{
+				Timeout: 60 * time.Second,
+			}
+			resp, err = client.Get(ipfsMetadataURL)
 			if err != nil {
 				log.Fatalf("Failed to fetch IPFS metadata: %v", err)
 			}
