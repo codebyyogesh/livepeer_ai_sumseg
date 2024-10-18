@@ -10,7 +10,9 @@ import (
 
 	"github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/asset"
 	lpsumsegconfig "github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/config"
+	"github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/image_to_video"
 	"github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/stream"
+	"github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/text_to_image"
 	caption "github.com/codebyyogesh/livepeer_ai_sumseg.git/cmd/transcript"
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
@@ -57,13 +59,15 @@ func init() {
 	// Load configuration in the root command
 
 	// Add subcommands
-	RootCmd.AddCommand(asset.AssetPlaybackCmd) // Register asset command
-	RootCmd.AddCommand(asset.AssetUploadCmd)   // Register asset command
-	RootCmd.AddCommand(stream.StreamCmd)       // Register stream command
-	RootCmd.AddCommand(caption.CaptionCmd)     // Register caption command
-	RootCmd.AddCommand(caption.SubtitlesCmd)   // Register subtitles command
-	RootCmd.AddCommand(caption.SummaryCmd)     // Register summary command
-	RootCmd.AddCommand(caption.SegmentsCmd)    // Register segments command
+	RootCmd.AddCommand(asset.AssetPlaybackCmd)         // Register asset command
+	RootCmd.AddCommand(asset.AssetUploadCmd)           // Register asset command
+	RootCmd.AddCommand(stream.StreamCmd)               // Register stream command
+	RootCmd.AddCommand(caption.CaptionCmd)             // Register caption command
+	RootCmd.AddCommand(caption.SubtitlesCmd)           // Register subtitles command
+	RootCmd.AddCommand(caption.SummaryCmd)             // Register summary command
+	RootCmd.AddCommand(caption.SegmentsCmd)            // Register segments command
+	RootCmd.AddCommand(text_to_image.TextToImageCmd)   // Register text to image command
+	RootCmd.AddCommand(image_to_video.ImageToVideoCmd) // Register image to video command
 	// Add other commands as needed
 	RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 
