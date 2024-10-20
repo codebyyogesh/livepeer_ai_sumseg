@@ -65,7 +65,6 @@ func init() {
 	RootCmd.AddCommand(caption.CaptionCmd)             // Register caption command
 	RootCmd.AddCommand(caption.SubtitlesCmd)           // Register subtitles command
 	RootCmd.AddCommand(caption.SummaryCmd)             // Register summary command
-	RootCmd.AddCommand(caption.SegmentsCmd)            // Register segments command
 	RootCmd.AddCommand(text_to_image.TextToImageCmd)   // Register text to image command
 	RootCmd.AddCommand(image_to_video.ImageToVideoCmd) // Register image to video command
 	// Add other commands as needed

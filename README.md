@@ -126,6 +126,8 @@ https://github.com/codebyyogesh/livepeer_ai_sumseg/wiki
 
 ## Upcoming features (v2.0 and above)
 
+- Support Docker
+- Support for segments in a video
 - Use livepeer ai apis for captions, summarize and subtitles if supported
 - Upload asset from a url
 - Move to webhooks for getting status updates of storage.
